@@ -130,9 +130,10 @@ static int ad911x_read_auxdac(struct iio_dev *indio_dev, unsigned int chan, unsi
 {
 	struct ad911x *st = iio_priv(indio_dev);
 	u8 ctrl_byte, tmp;
-	int ret;
 
 #ifdef AD911X_USE_BIDI_SPI
+	int ret;
+
 	ret = ad911x_read(indio_dev, AD911X_AUXDAC_ADDR(chan) + 1, &ctrl_byte);
 	if (ret)
 		return ret;
@@ -164,9 +165,10 @@ static int ad911x_read_dacgain(struct iio_dev *indio_dev, unsigned int chan, uns
 {
 	struct ad911x *st = iio_priv(indio_dev);
 	u8 tmp;
-	int ret;
 
 #ifdef AD911X_USE_BIDI_SPI
+	int ret;
+
 	ret = ad911x_read(indio_dev, AD911X_GAINCTL_ADDR(chan), &tmp);
 	if (ret)
 		return ret;
@@ -184,7 +186,7 @@ static int ad911x_write_rset(struct iio_dev *indio_dev, unsigned int chan, unsig
 	struct ad911x *st = iio_priv(indio_dev);
 	int ret;
 
-	ad911x_write(indio_dev, AD911X_GAINCTL_ADDR(chan) + 1, AD911X_INTERNAL_RSET_ENABLE | (val & 0x3F));
+	ret = ad911x_write(indio_dev, AD911X_GAINCTL_ADDR(chan) + 1, AD911X_INTERNAL_RSET_ENABLE | (val & 0x3F));
 	if (ret)
 		return ret;
 	st->shadowregs[AD911X_GAINCTL_ADDR(chan) + 1] = AD911X_INTERNAL_RSET_ENABLE | (val & 0x3F);
@@ -195,9 +197,9 @@ static int ad911x_read_rset(struct iio_dev *indio_dev, unsigned int chan, unsign
 {
 	struct ad911x *st = iio_priv(indio_dev);
 	u8 tmp;
-	int ret;
 
 #ifdef AD911X_USE_BIDI_SPI
+	int ret;
 	ret = ad911x_read(indio_dev, AD911X_GAINCTL_ADDR(chan) + 1, &tmp);
 	if (ret)
 		return ret;
@@ -225,7 +227,6 @@ static int ad911x_fill_shadowregs(struct iio_dev *indio_dev)
 static int ad911x_init_registers(struct iio_dev *indio_dev)
 {
 	struct ad911x *st = iio_priv(indio_dev);
-	u8 ctrl_byte;
 	int ret, ii;
 
 	for(ii=0; ii<2; ii++)
@@ -247,9 +248,6 @@ static int ad911x_init_registers(struct iio_dev *indio_dev)
 static int ad911x_read_raw(struct iio_dev *indio_dev,
 	struct iio_chan_spec const *chan, int *val, int *val2, long info)
 {
-	struct ad911x *st = iio_priv(indio_dev);
-	struct regulator_bulk_data *reg;
-	int scale_uv;
 	int ret;
 	unsigned int tmp;
 
@@ -270,8 +268,9 @@ static int ad911x_read_raw(struct iio_dev *indio_dev,
 		ret = ad911x_read_rset(indio_dev, chan->address, &tmp);
 		if (ret)
 			return ret;
-		tmp -= 32;
-		tmp *= 62500;
+
+		tmp ^= 0x20;
+		tmp *= 250000;
 		*val = tmp/1000000;
 		*val2 = tmp - ((*val)*1000000);
 		if (*val==0)
@@ -315,26 +314,28 @@ static int ad911x_write_raw(struct iio_dev *indio_dev,
 				return -EINVAL;
 			else	// val2 is negative
 			{
-				tmp = val2 / -62500;
+				tmp = (-1 * val2) / 250000;
 			}
 		}
-		else if (val == -1)
+		else if (val < 0)
 		{
-			if (val2 > 0)
+			if (val2 >= 0)
 			{
-				tmp = val2 / 62500;
+				tmp = ((-1 * val) * 1000000 + val2) / 250000;
 			}
 			else
 			{
-				tmp = val2 / -62500;
+				return -EINVAL; // val and val2 shouldn't be both negative
 			}
-			tmp += 16;	// absolute value was >=1dB
 		}
 		else
-			return -EINVAL;
-		if (tmp > 31)
-			tmp = 31;
-		tmp += 32;
+			return -EINVAL;	// positive values not allowed
+		if (tmp > 63)
+			tmp = 63;
+		if (tmp < 0)
+			tmp = 0;
+
+		tmp ^= 0x20;
 
 		ret = ad911x_write_rset(indio_dev, chan->address, tmp);
 		break;
@@ -384,7 +385,6 @@ static int ad911x_spi_probe(struct spi_device *spi)
 	const struct spi_device_id *id = spi_get_device_id(spi);
 	struct iio_dev *indio_dev;
 	struct ad911x *st;
-	unsigned int i;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -414,14 +414,11 @@ static int ad911x_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int ad911x_spi_remove(struct spi_device *spi)
+static void ad911x_spi_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct ad911x *st = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
-
-	return 0;
 }
 
 static const struct spi_device_id ad911x_spi_ids[] = {
