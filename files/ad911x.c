@@ -351,28 +351,18 @@ static const struct iio_info ad911x_info = {
 	.write_raw = ad911x_write_raw,
 };
 
-#define AD911X_CHANNEL(chan, bits) {				\
+#define AD911X_CHANNEL(chan) {				\
 	.type = IIO_VOLTAGE,					\
 	.indexed = 1,						\
 	.output = 1,						\
 	.channel = (chan),					\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_CALIBSCALE) | BIT(IIO_CHAN_INFO_HARDWAREGAIN),			\
-	.address = (chan),					\
-	.scan_type = {						\
-		.sign = 'u',					\
-		.realbits = (bits),				\
-		.storagebits = 16,				\
-		.shift = 0,				\
-	},							\
 }
 
-#define DECLARE_AD911X_CHANNELS(name, bits) \
-const struct iio_chan_spec name[] = { \
-	AD911X_CHANNEL(0, bits), \
-	AD911X_CHANNEL(1, bits), \
-}
-
-static DECLARE_AD911X_CHANNELS(ad911x_channels, 10);
+static const struct iio_chan_spec ad911x_channels[] = { \
+	AD911X_CHANNEL(0), \
+	AD911X_CHANNEL(1), \
+};
 
 static const struct ad911x_chip_info ad911x_chip_info[] = {
 	[ID_AD911X] = {
