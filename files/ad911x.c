@@ -356,6 +356,7 @@ static const struct iio_info ad911x_info = {
 	.indexed = 1,						\
 	.output = 1,						\
 	.channel = (chan),					\
+	.address = (chan),					\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_CALIBSCALE) | BIT(IIO_CHAN_INFO_HARDWAREGAIN),			\
 }
 
